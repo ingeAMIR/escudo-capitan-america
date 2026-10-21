@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escudo del Capitán América</title>
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+<style>
+  :root { --bg:#0e1420; --panel:#182235; --text:#eef2f8; --muted:#9aa7bd; --accent:#c8202b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:radial-gradient(circle at 50% 30%,#1c2a44,var(--bg) 70%); color:var(--text); min-height:100vh; }
+  header { padding:24px 16px 0; text-align:center; }
+  h1 { margin:0; font-size:clamp(1.4rem,4vw,2.2rem); letter-spacing:.02em; }
+  header p { margin:6px 0 0; color:var(--muted); }
+  model-viewer { width:100%; height:min(70vh,640px); }
+  .controls { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; padding:0 16px 32px; }
+  button { font:inherit; font-weight:600; color:var(--text); background:var(--panel); border:1px solid #2c3a55; border-radius:10px; padding:12px 18px; cursor:pointer; display:flex; align-items:center; gap:10px; transition:transform .1s, border-color .2s; }
+  button:hover { border-color:var(--accent); }
+  button:active { transform:scale(.97); }
+  .swatch { width:16px; height:16px; border-radius:50%; border:1px solid #fff6; }
+  .state { color:var(--muted); font-weight:400; }
+  footer { text-align:center; color:var(--muted); font-size:.85rem; padding-bottom:24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Escudo del Capitán América</h1>
+  <p>Acero · pintura · cuero · bronce — arrastra para girar y mira la agarradera por detrás</p>
+</header>
+
+<model-viewer id="escudo" src="escudo.glb" alt="Escudo del Capitán América en 3D"
+  camera-controls auto-rotate auto-rotate-delay="2000" shadow-intensity="1"
+  environment-image="neutral" exposure="1.1" camera-orbit="0deg 80deg auto"></model-viewer>
+
+<div class="controls">
+  <button id="btnDesgaste">Acabado: <span class="state" id="lblDesgaste">Limpio</span></button>
+  <button id="btnAcero"><span class="swatch" id="swAcero"></span>Acero: <span class="state" id="lblAcero">Plata</span></button>
+  <button id="btnNormal">Normal map del bronce: <span class="state" id="lblNormal">Activado</span></button>
+</div>
+<footer>Modelo low-poly (~4.250 triángulos) · texturas PBR 512 px · model-viewer</footer>
+
+<script type="module">
+const mv = document.querySelector('#escudo');
+const aceros = [
+  { nombre: 'Plata', color: [1, 1, 1, 1], css: '#d6d8dc' },
+  { nombre: 'Oro', color: [1, 0.72, 0.3, 1], css: '#e8b54d' },
+  { nombre: 'Vibranium', color: [0.45, 0.55, 0.9, 1], css: '#7486d8' },
+  { nombre: 'Pavonado', color: [0.18, 0.18, 0.2, 1], css: '#2e2e33' },
+];
+let iAcero = 0, desgastado = false, normalOn = true;
+
+mv.addEventListener('load', async () => {
+  const mat = n => mv.model.getMaterialByName(n);
+  const roja = mat('Pintura_Roja'), azul = mat('Pintura_Azul'), acero = mat('Acero'), bronce = mat('Bronce');
+
+  // Texturas originales (limpio) y set desgastado precargado
+  const original = m => ({
+    base: m.pbrMetallicRoughness.baseColorTexture.texture,
+    orm: m.pbrMetallicRoughness.metallicRoughnessTexture.texture,
+    normal: m.normalTexture.texture,
+  });
+  const cargar = async k => ({
+    base: await mv.createTexture(`textures/${k}_desgastado_basecolor.jpg`),
+    orm: await mv.createTexture(`textures/${k}_desgastado_orm.jpg`),
+    normal: await mv.createTexture(`textures/${k}_desgastado_normal.jpg`),
+  });
+  const limpio = { roja: original(roja), azul: original(azul) };
+  const gastado = { roja: await cargar('pintura_roja'), azul: await cargar('pintura_azul') };
+  const bronceNormal = bronce.normalTexture.texture;
+
+  const aplicar = (m, t) => {
+    m.pbrMetallicRoughness.baseColorTexture.setTexture(t.base);
+    m.pbrMetallicRoughness.metallicRoughnessTexture.setTexture(t.orm);
+    m.normalTexture.setTexture(t.normal);
+  };
+
+  document.querySelector('#btnDesgaste').onclick = () => {
+    desgastado = !desgastado;
+    const set = desgastado ? gastado : limpio;
+    aplicar(roja, set.roja); aplicar(azul, set.azul);
+    document.querySelector('#lblDesgaste').textContent = desgastado ? 'Desgastado' : 'Limpio';
+  };
+
+  const pintarAcero = () => {
+    const a = aceros[iAcero];
+    acero.pbrMetallicRoughness.setBaseColorFactor(a.color);
+    document.querySelector('#lblAcero').textContent = a.nombre;
+    document.querySelector('#swAcero').style.background = a.css;
+  };
+  document.querySelector('#btnAcero').onclick = () => { iAcero = (iAcero + 1) % aceros.length; pintarAcero(); };
+  pintarAcero();
+
+  // El bronce está en la parte trasera: girar la cámara para ver el cambio
+  document.querySelector('#btnNormal').onclick = () => {
+    normalOn = !normalOn;
+    bronce.normalTexture.setTexture(normalOn ? bronceNormal : null);
+    document.querySelector('#lblNormal').textContent = normalOn ? 'Activado' : 'Desactivado';
+    mv.autoRotate = false;
+    mv.cameraOrbit = '180deg 75deg 1.2m';
+  };
+});
+</script>
+</body>
+</html>
